@@ -1,2 +1,3 @@
-# ontheroad
-IITC plugin : Get routes between portals 
+# IITC plugin : Get routes between portals 
+
+- Bookmarks plugin required
