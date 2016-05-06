@@ -2,12 +2,12 @@
 // @id             ontheroad
 // @name           IITC plugin: OnTheRoad
 // @category       Layer
-// @version        0.0.3.20160423.002
+// @version        0.0.4.20160423.004
 // @namespace      https://github.com/jonatkins/ingress-intel-total-conversion
 // @updateURL      https://github.com/Hurqalia/ontheroad/raw/master/ontheroad.meta.js
 // @downloadURL    https://github.com/Hurqalia/ontheroad/raw/master/ontheroad.user.js
 // @installURL     https://github.com/Hurqalia/ontheroad/raw/master/ontheroad.user.js
-// @description    [ontheroad-2016-04-23-002] OnTheRoad
+// @description    [ontheroad-2016-04-23-004] OnTheRoad
 // @include        https://www.ingress.com/intel*
 // @include        http://www.ingress.com/intel*
 // @match          https://www.ingress.com/intel*
