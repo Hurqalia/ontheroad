@@ -2,12 +2,12 @@
 // @id             ontheroad
 // @name           IITC plugin: OnTheRoad
 // @category       Layer
-// @version        0.1.0.20160423.005
+// @version        0.1.0.20160612.001
 // @namespace      https://github.com/jonatkins/ingress-intel-total-conversion
 // @updateURL      https://github.com/Hurqalia/ontheroad/raw/master/ontheroad.meta.js
 // @downloadURL    https://github.com/Hurqalia/ontheroad/raw/master/ontheroad.user.js
 // @installURL     https://github.com/Hurqalia/ontheroad/raw/master/ontheroad.user.js
-// @description    [ontheroad-2016-04-23-005] OnTheRoad	
+// @description    [ontheroad-2016-06-12-001] OnTheRoad
 // @include        https://www.ingress.com/intel*
 // @include        http://www.ingress.com/intel*
 // @match          https://www.ingress.com/intel*
@@ -360,9 +360,13 @@ function wrapper(plugin_info) {
 	};
 
 	window.plugin.ontheroad.portalLatLng = function(pid) {
-		var point_location = window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk;
+		//var point_location = window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk;
+		var point_location = {};
 		if (pid === 'id1000000000001') {
 			point_location = window.plugin.ontheroad.my_position;
+		}
+		else {
+			point_location = window.plugin.ontheroad.getBookmarks();
 		}
 		return {
 			lat: parseFloat(point_location[pid].latlng.split(',')[0]),
@@ -535,16 +539,37 @@ function wrapper(plugin_info) {
 		layerChooser.removeLayer(layerGroup);
 		updateDisplayedLayerGroup(name, enabled);
 	};
+	
+	window.plugin.ontheroad.getBookmarks = function() {
+		var result = {};
+		if(typeof window.plugin.bookmarks.bkmrksObj != 'undefined'
+			&& window.plugin.bookmarks.bkmrksObj.portals != 'undefined') {
+			for(folderId in window.plugin.bookmarks.bkmrksObj.portals) {
+				var folder = window.plugin.bookmarks.bkmrksObj.portals[folderId];
+				if(typeof folder.bkmrk != 'undefined') {
+					for(bookmarkId in folder.bkmrk) {
+						var bookmark = folder.bkmrk[bookmarkId];
+						result[bookmarkId] = bookmark;
+					}
+				}
+			}
+		}
+		return result;
+	};
 
 	// dialogs
 	window.plugin.ontheroad.onDialog = function() {
+		var bookmarks = window.plugin.ontheroad.getBookmarks();
+		window.truc = bookmarks;
 		if (window.plugin.ontheroad.isSmart) {
-			if (typeof window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk === 'undefined' || Object.keys(window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk).length < 1) {
+			//if (typeof window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk === 'undefined' || Object.keys(window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk).length < 1) {
+			if(Object.keys(bookmarks).length < 1) {
 				alert('At least 1 portal must be bookmarked to calculate a route');
                 return false;
 			}
 		} else {
-			if (typeof window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk === 'undefined' || Object.keys(window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk).length < 2) {
+			//if (typeof window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk === 'undefined' || Object.keys(window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk).length < 2) {
+			if(Object.keys(bookmarks).length < 2) {
 				alert('At least 2 portals must be bookmarked to calculate a route');
 				return false;
 			}
@@ -610,7 +635,9 @@ function wrapper(plugin_info) {
 		if (Object.keys(window.plugin.ontheroad.my_position).length > 0) {
 			menu_options += '<option value="id1000000000001">' + window.plugin.ontheroad.my_position.id1000000000001.label + '</option>';
 		}
-		$.each(window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk, function(bid, record) {
+		var bookmarks = window.plugin.ontheroad.getBookmarks();
+		//$.each(window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk, function(bid, record) {
+		$.each(bookmarks, function(bid, record) {
 			menu_options += '<option value="' + bid + '">' + record.label + '</option>';
 			menu_items += '<input type="checkbox" class="otr-waypoint-add" value="' + bid +'" /> '+ record.label + '&nbsp;/&nbsp;';
 		});
