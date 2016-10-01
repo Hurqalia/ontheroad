@@ -2,7 +2,7 @@
 // @id             ontheroad
 // @name           IITC plugin: OnTheRoad
 // @category       Layer
-// @version        0.1.1.20160612.001
+// @version        0.1.2.20160612.001
 // @namespace      https://github.com/jonatkins/ingress-intel-total-conversion
 // @updateURL      https://github.com/Hurqalia/ontheroad/raw/master/ontheroad.meta.js
 // @downloadURL    https://github.com/Hurqalia/ontheroad/raw/master/ontheroad.user.js
@@ -18,25 +18,30 @@
 function wrapper(plugin_info) {
 	if(typeof window.plugin !== 'function') window.plugin = function() {};
 	plugin_info.buildName = 'hurqalia22';
-	plugin_info.dateTimeVersion = '20160423.005';
+	plugin_info.dateTimeVersion = '20161001.006';
 	plugin_info.pluginId = 'ontheroad';
 
 	// PLUGIN START ////////////////////////////////////////////////////////
 
 	// use own namespace for plugin
 	window.plugin.ontheroad = function() {};
-	window.plugin.ontheroad.layers		= {};
-	window.plugin.ontheroad.layer_id	= 0;
-	window.plugin.ontheroad.travel_selected	= 'drive';
-	window.plugin.ontheroad.routes_layers	= {};
-	window.plugin.ontheroad.config_request	= {};
-	window.plugin.ontheroad.route_request	= {};
-	window.plugin.ontheroad.routes_infos	= {};
-	window.plugin.ontheroad.routes		= {};
-	window.plugin.ontheroad.my_position	= {};
-	window.plugin.ontheroad.KEY_STORAGE	= 'ontheroad-routes';
-	window.plugin.ontheroad.isSmart		= undefined;
-	window.plugin.ontheroad.isAndroid	= function() {
+	window.plugin.ontheroad.layers		 = {};
+	window.plugin.ontheroad.layer_id	 = 0;
+	window.plugin.ontheroad.travel_selected	 = 'drive';
+	window.plugin.ontheroad.routes_layers	 = {};
+	window.plugin.ontheroad.config_request	 = {};
+	window.plugin.ontheroad.route_request	 = {};
+	window.plugin.ontheroad.routes_infos	 = {};
+	window.plugin.ontheroad.routes		 = {};
+	window.plugin.ontheroad.routepoints	 = {};
+	window.plugin.ontheroad.roadpoints	 = { 'bookmarks' : {}, 'reswue' : {} };
+	window.plugin.ontheroad.roadpoints_count = 0;
+	window.plugin.ontheroad.my_position	 = {};
+	window.plugin.ontheroad.KEY_STORAGE	 = 'ontheroad-routes';
+	window.plugin.ontheroad.hasBookmarks     = false;
+	window.plugin.ontheroad.hasReswue        = false;
+	window.plugin.ontheroad.isSmart		 = undefined;
+	window.plugin.ontheroad.isAndroid	 = function() {
 		if(typeof android !== 'undefined' && android) {
 			return true;
 		}
@@ -94,8 +99,19 @@ function wrapper(plugin_info) {
 	'    <p> ' +
 	'      <button class="otr-add-waypoint">Add Waypoint</button> '+
 	'      <div id="otr-list-waypoints">' +
+	'        <div id="otr-way-tab" class="otr-block-box">' +
+	'          <div class="otr-way-tab" id="otr-way-tab-bookmarks" data-tab="bookmarks">Bookmarks</div>' +
+	'          <div class="otr-way-tab" id="otr-way-tab-portals" data-tab="portals">Op Portals</div>' +
+	'          <div class="otr-way-tab" id="otr-way-tab-alerts" data-tab="alerts">Op Alerts</div>' +
+	'        </div>' +
+	'        <div id="otr-way-blocs">' +
+	'          <div id="otr-way-bloc-bookmarks"></div>' +
+	'          <div id="otr-way-bloc-portals"></div>' +
+	'          <div id="otr-way-bloc-alerts"></div>' +
+	'        </div>' +
 	'      </div>' +
-	'    </p></div>' +
+	'    </p>' +
+	'  </div>' +
 	'  <div class="otr-block-box">' +
 	'    <div class="otr-sub-title">Rendering</div>' +
 	'    <p>'+
@@ -178,9 +194,9 @@ function wrapper(plugin_info) {
 			}
 		}
 
-    	window.plugin.ontheroad.routes_infos[window.plugin.ontheroad.config_request.uid] = {
-	    	'title'    : window.plugin.ontheroad.config_request.label,
-    		'summary'  : route_infos,
+	    	window.plugin.ontheroad.routes_infos[window.plugin.ontheroad.config_request.uid] = {
+			'title'    : window.plugin.ontheroad.config_request.label,
+			'summary'  : route_infos,
 			'distance' : total_distance,
 			'duration' : total_duration,
 			'details'  : route_details
@@ -360,13 +376,11 @@ function wrapper(plugin_info) {
 	};
 
 	window.plugin.ontheroad.portalLatLng = function(pid) {
-		//var point_location = window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk;
 		var point_location = {};
 		if (pid === 'id1000000000001') {
 			point_location = window.plugin.ontheroad.my_position;
-		}
-		else {
-			point_location = window.plugin.ontheroad.getBookmarks();
+		} else {
+			point_location = window.plugin.ontheroad.routepoints;
 		}
 		return {
 			lat: parseFloat(point_location[pid].latlng.split(',')[0]),
@@ -514,6 +528,7 @@ function wrapper(plugin_info) {
 			window.plugin.ontheroad.showDirectionOptions();
 		}
 	};
+
 	window.plugin.ontheroad.onRemove = function() {
 		$('#otr-message-content').html('');
 		var remove_layer = $('#otr-travel-remove').val();
@@ -539,40 +554,120 @@ function wrapper(plugin_info) {
 		layerChooser.removeLayer(layerGroup);
 		updateDisplayedLayerGroup(name, enabled);
 	};
-	
-	window.plugin.ontheroad.getBookmarks = function() {
-		var result = {};
-		if(typeof window.plugin.bookmarks.bkmrksObj != 'undefined'
-			&& window.plugin.bookmarks.bkmrksObj.portals != 'undefined') {
-			for(folderId in window.plugin.bookmarks.bkmrksObj.portals) {
+
+	// get books, reswue-op portals & alerts
+	window.plugin.ontheroad.getRoadPoints = function() {
+		window.plugin.ontheroad.hasBookmarks     = (window.plugin.bookmarks) ? true : false;
+		window.plugin.ontheroad.hasReswue        = (window.plugin.reswue) ? true : false;
+		window.plugin.ontheroad.roadpoints_count = 0;
+		window.plugin.ontheroad.routepoints      = {};
+		if (window.plugin.ontheroad.hasBookmarks) {
+			var bcount = window.plugin.ontheroad.getBookmarksPoints();
+			window.plugin.ontheroad.roadpoints_count += bcount;
+		}
+		if (window.plugin.ontheroad.hasReswue) {
+			var rcount = window.plugin.ontheroad.getReswuePoints();
+			window.plugin.ontheroad.roadpoints_count += rcount;
+		}
+	};
+
+	window.plugin.ontheroad.getReswuePoints = function() {
+		var portal_count = 0;
+		window.plugin.ontheroad.roadpoints.reswue = {};
+		if (window.plugin.reswue.core.operations.length === 0) {
+			return portal_count;
+		}
+
+		$.each(window.plugin.reswue.core.operations, function(oid, operation) {
+			window.plugin.ontheroad.roadpoints.reswue['op' + oid] = { 'name' : operation.data.operationName, 'portals_count' : 0 , 'portals' : {}, 'alerts_count' : 0 , 'alerts' : {} };
+			$.each(operation.data.portals, function(pid, portal) {
+				portal_count++;
+				var puid = window.plugin.ontheroad.uniqid();
+				window.plugin.ontheroad.roadpoints.reswue['op' + oid].portals_count++;
+				window.plugin.ontheroad.roadpoints.reswue['op' + oid].portals['id' + puid] = {
+					'guid'   : portal.id,
+					'label'  : portal.name,
+					'latlng' : portal.lat + ',' + portal.lng
+				};
+				window.plugin.ontheroad.routepoints['id' + puid] = window.plugin.ontheroad.roadpoints.reswue['op' + oid].portals['id' + puid];
+			});
+			$.each(operation.data.alerts, function(pid, alert) {
+				portal_count++;
+				var puid = window.plugin.ontheroad.uniqid();
+				window.plugin.ontheroad.roadpoints.reswue['op' + oid].alerts_count++;
+				window.plugin.ontheroad.roadpoints.reswue['op' + oid].alerts['id' + puid] = {
+					'guid'   : alert.portal.id,
+					'label'  : alert.portal.name,
+					'latlng' : alert.portal.lat + ',' + alert.portal.lng
+				};
+				window.plugin.ontheroad.routepoints['id' + puid] = window.plugin.ontheroad.roadpoints.reswue['op' + oid].alerts['id' + puid];
+			});
+		});
+		return portal_count;
+	};
+
+	window.plugin.ontheroad.getBookmarksPoints = function() {
+		var portal_count = 0;
+		window.plugin.ontheroad.roadpoints.bookmarks = {};
+		if (typeof window.plugin.bookmarks.bkmrksObj != 'undefined' && window.plugin.bookmarks.bkmrksObj.portals != 'undefined') {
+			for (var folderId in window.plugin.bookmarks.bkmrksObj.portals) {
 				var folder = window.plugin.bookmarks.bkmrksObj.portals[folderId];
-				if(typeof folder.bkmrk != 'undefined') {
-					for(bookmarkId in folder.bkmrk) {
+				if (typeof folder.bkmrk != 'undefined') {
+					for (var bookmarkId in folder.bkmrk) {
 						var bookmark = folder.bkmrk[bookmarkId];
-						result[bookmarkId] = bookmark;
+						window.plugin.ontheroad.roadpoints.bookmarks[bookmarkId] = bookmark;
+						window.plugin.ontheroad.routepoints[bookmarkId] = window.plugin.ontheroad.roadpoints.bookmarks[bookmarkId];
+						portal_count++;
 					}
 				}
 			}
 		}
-		return result;
+		return portal_count;
 	};
 
 	// dialogs
 	window.plugin.ontheroad.onDialog = function() {
-		var bookmarks = window.plugin.ontheroad.getBookmarks();
-		window.truc = bookmarks;
+		window.plugin.ontheroad.getRoadPoints();
 		if (window.plugin.ontheroad.isSmart) {
-			//if (typeof window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk === 'undefined' || Object.keys(window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk).length < 1) {
-			if(Object.keys(bookmarks).length < 1) {
+			if (window.plugin.ontheroad.roadpoints_count < 1) {
 				alert('At least 1 portal must be bookmarked to calculate a route');
-                return false;
+		                return false;
 			}
 		} else {
-			//if (typeof window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk === 'undefined' || Object.keys(window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk).length < 2) {
-			if(Object.keys(bookmarks).length < 2) {
+			if (window.plugin.ontheroad.roadpoints_count < 2) {
 				alert('At least 2 portals must be bookmarked to calculate a route');
 				return false;
 			}
+		}
+
+		var waytab_selector = function(selected_tab) {
+			if (selected_tab === '') {
+				selected_tab = waytab_get_selected();
+			}
+			console.log('selected_tab : ' + selected_tab);
+			$.each($('.otr-way-tab'), function() {
+				var tabname = $(this).attr('data-tab');
+				if (selected_tab === tabname) {
+					console.log('found : ' + tabname);
+					$(this).addClass('otr-way-tab-on');
+					$('#otr-way-bloc-' + tabname).show();
+				} else {
+					$('#otr-way-tab-' + tabname).removeClass('otr-way-tab-on');
+					$('#otr-way-bloc-' + tabname).hide();
+				}
+			});
+		}
+
+		var waytab_get_selected = function() {
+			var tabname = '';
+			$.each($('.otr-way-tab'), function() {
+				if ($(this).hasClass('otr-way-tab-on')) {
+					tabname = $(this).attr('data-tab');
+					return true;
+				}
+			});
+			if (tabname === '') { tabname = 'bookmarks'; }
+			return tabname;
 		}
 
 		dialog({
@@ -597,7 +692,21 @@ function wrapper(plugin_info) {
 			var direction_options  = window.plugin.ontheroad.makeDirectionOptions();
 			$('#otr-portal-from').append(direction_options.options);
 			$('#otr-portal-to').append(direction_options.options);
-			$('#otr-list-waypoints').append(direction_options.items);
+			if (direction_options.items.bookmarks !== '') {
+				$('#otr-way-bloc-bookmarks').html(direction_options.items.bookmarks);
+			} else {
+				$('#otr-way-bloc-bookmarks').html('<div style="text-align:center; margin:10px;">No portal bookmarked</div>');
+			}
+			if (direction_options.items.portals !== '') {
+				$('#otr-way-bloc-portals').html(direction_options.items.portals);
+			} else {
+				$('#otr-way-bloc-portals').html('<div style="text-align:center; margin:10px;">No operation portal available</div>');
+			}
+			if (direction_options.items.alerts !== '') {
+				$('#otr-way-bloc-alerts').html(direction_options.items.alerts);
+			} else {
+				$('#otr-way-bloc-alerts').html('<div style="text-align:center; margin:10px;">No operation alert available</div>');
+			}
 		}
 
 		$.each(window.plugin.ontheroad.routes_layers, function(i, route) {
@@ -622,33 +731,79 @@ function wrapper(plugin_info) {
 				$('#otr-list-waypoints').hide();
 				$('.otr-add-waypoint').text('Add waypoints');
 			} else {
+				waytab_selector('');
 				$('#otr-list-waypoints').show();
 				$('.otr-add-waypoint').text('Hide');
 			}
 		});
 
-    	};
+		$('.otr-way-tab').click(function() {
+			waytab_selector($(this).attr('data-tab'));
+		});
+	};
 
 	window.plugin.ontheroad.makeDirectionOptions = function() {
 		var menu_options = '';
-		var menu_items = '';
+		var menu_items = { bookmarks : '', portals : '', alerts : '' };
+
 		if (Object.keys(window.plugin.ontheroad.my_position).length > 0) {
 			menu_options += '<option value="id1000000000001">' + window.plugin.ontheroad.my_position.id1000000000001.label + '</option>';
 		}
-		var bookmarks = window.plugin.ontheroad.getBookmarks();
-		//$.each(window.plugin.bookmarks.bkmrksObj.portals.idOthers.bkmrk, function(bid, record) {
-		$.each(bookmarks, function(bid, record) {
+		window.plugin.ontheroad.getRoadPoints();
+		$.each(window.plugin.ontheroad.roadpoints.bookmarks, function(bid, record) {
 			menu_options += '<option value="' + bid + '">' + record.label + '</option>';
-			menu_items += '<input type="checkbox" class="otr-waypoint-add" value="' + bid +'" /> '+ record.label + '&nbsp;/&nbsp;';
+			menu_items.bookmarks += '<input type="checkbox" class="otr-waypoint-add" value="' + bid +'" /> '+ record.label + '&nbsp;/&nbsp;';
+		});
+		if ((Object.keys(window.plugin.ontheroad.roadpoints.bookmarks).length > 0) && ( Object.keys(window.plugin.ontheroad.roadpoints.reswue).length > 0)) {
+			menu_options = '<optgroup label="Bookmarks">' + menu_options + '</optgroup>';
+		}
+
+		$.each(window.plugin.ontheroad.roadpoints.reswue, function(bid, record) {
+			if ((record.portals_count === 0) && (record.alerts_count === 0)) {
+				return;
+			}
+			menu_options += '<optgroup label="Op : ' + record.name + '">';
+			if (record.portals_count > 0) {
+				menu_options += '<optgroup label=" Portals">';
+				$.each(record.portals, function(pid, portal) {
+					menu_options += '<option value="' + pid + '">' + portal.label + '</option>';
+					menu_items.portals += '<input type="checkbox" class="otr-waypoint-add" value="' + pid +'" /> '+ portal.label + '&nbsp;/&nbsp;';
+				});
+				menu_options += '</optgroup>';
+			}
+
+			if (record.alerts_count > 0) {
+				menu_options += '<optgroup label=" Alerts">';
+				$.each(record.alerts, function(aid, alert) {
+					menu_options += '<option value="' + aid + '">' + alert.label + '</option>';
+					menu_items.alerts += '<input type="checkbox" class="otr-waypoint-add" value="' + aid +'" /> '+ alert.label + '&nbsp;/&nbsp;';
+				});
+				menu_options += '</optgroup>';
+			}
+			menu_options += '</optgroup>';
 		});
 		return { options : menu_options, items : menu_items};
 	};
 
 	window.plugin.ontheroad.showDirectionOptions = function() {
-			var direction_options  = window.plugin.ontheroad.makeDirectionOptions();
-			$('#otr-portal-from').append(direction_options.options);
-			$('#otr-portal-to').append(direction_options.options);
-			$('#otr-list-waypoints').append(direction_options.items);
+		var direction_options  = window.plugin.ontheroad.makeDirectionOptions();
+		$('#otr-portal-from').append(direction_options.options);
+		$('#otr-portal-to').append(direction_options.options);
+		if (direction_options.items.bookmarks !== '') {
+			$('#otr-way-bloc-bookmarks').html(direction_options.items.bookmarks);
+		} else {
+			$('#otr-way-bloc-bookmarks').html('<div style="text-align:center; margin:10px;">No portal bookmarked</div>');
+		}
+		if (direction_options.items.portals !== '') {
+			$('#otr-way-bloc-portals').html(direction_options.items.portals);
+		} else {
+			$('#otr-way-bloc-portals').html('<div style="text-align:center; margin:10px;">No operation portal available</div>');
+		}
+		if (direction_options.items.alerts !== '') {
+			$('#otr-way-bloc-alerts').html(direction_options.items.alerts);
+		} else {
+			$('#otr-way-bloc-alerts').html('<div style="text-align:center; margin:10px;">No operation alert available</div>');
+		}
 	};
 
 	window.plugin.ontheroad.onPaneChanged = function(pane) {
@@ -665,10 +820,14 @@ function wrapper(plugin_info) {
 
 	// init setup
 	window.plugin.ontheroad.setup = function() {
-		if (!window.plugin.bookmarks) {
-			alert('Bookmarks plugin required');
+		window.plugin.ontheroad.hasBookmarks = (window.plugin.bookmarks) ? true : false;
+		window.plugin.ontheroad.hasReswue    = (window.plugin.reswue) ? true : false;
+
+		if (!window.plugin.ontheroad.hasBookmarks && !window.plugin.ontheroad.hasReswue) {
+			alert('Bookmarks or Reswue plugins are required');
 			return false;
 		}
+
 		window.plugin.ontheroad.isSmart = window.isSmartphone();
 		window.plugin.ontheroad.initCss();
 		window.plugin.ontheroad.initDatas();
@@ -683,6 +842,7 @@ function wrapper(plugin_info) {
 	};
 
 	window.plugin.ontheroad.initCss = function() {
+		$('head').append('<style>.otr-way-tab { width:100px; display:inline-block; } #otr-way-tab { background-color:#0e3d4e; cursor:pointer; } #otr-way-tab > div.otr-way-tab { display:inline-block; margin:0px; width:30%; text-align:center; } .otr-way-tab-on, #otr-way-tab > div.otr-way-tab:hover { background-color:#13858C; width:30%; text-align:center; } </style>');
 		$('head').append('<style>.otr-block-box { border-bottom: 1px solid #20A8B1; } .otr-sub-title { color:#20A8B1; } .otr-label-way { width:100px; display:inline-block; } #otr-travel-tab { height:36px; background-color:#0e3d4e; } #otr-travel-tab > div.otr-tab { height:35px; width:20%; display:inline-block; margin:0px; } #otr-travel-tab > div.otr-tab:hover { background-color:#13858C; } .otr-icon { height:35px; width:35px; margin:auto; }</style>');
 		$('head').append('<style>.otr-icon-drive { background: url(' + window.plugin.ontheroad.ICON_SPRITE + ') no-repeat 0 -1px; } .otr-icon-drive-on, .otr-icon-drive:hover { background: url(' + window.plugin.ontheroad.ICON_SPRITE + ') no-repeat 0 -36px; } .otr-icon-transport { background: url(' + window.plugin.ontheroad.ICON_SPRITE + ') no-repeat -37px 0px; } .otr-icon-transport-on, .otr-icon-transport:hover { background: url(' + window.plugin.ontheroad.ICON_SPRITE + ') no-repeat -37px -35px; } .otr-icon-walk { background: url(' + window.plugin.ontheroad.ICON_SPRITE + ') no-repeat -70px 0px; } .otr-icon-walk-on, .otr-icon-walk:hover { background: url(' + window.plugin.ontheroad.ICON_SPRITE + ') no-repeat -70px -35px; } .otr-icon-bicycle { background: url(' + window.plugin.ontheroad.ICON_SPRITE + ') no-repeat -105px 0px; } .otr-icon-bicycle-on, .otr-icon-bicycle:hover { background: url(' + window.plugin.ontheroad.ICON_SPRITE + ') no-repeat -105px -35px; }</style>');
 		$('head').append('<style>.otr-pane-ico { background-image: url(' + window.plugin.ontheroad.ICON_TOOLBAR + '); background-repeat: no-repeat; background-position: -2px;}</style>');
