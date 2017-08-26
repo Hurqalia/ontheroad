@@ -2,7 +2,7 @@
 // @id             ontheroad
 // @name           IITC plugin: OnTheRoad
 // @category       Layer
-// @version        0.1.3.20160612.001
+// @version        0.1.4.20160612.001
 // @namespace      https://github.com/jonatkins/ingress-intel-total-conversion
 // @updateURL      https://github.com/Hurqalia/ontheroad/raw/master/ontheroad.meta.js
 // @downloadURL    https://github.com/Hurqalia/ontheroad/raw/master/ontheroad.user.js
@@ -22,7 +22,7 @@
 function wrapper(plugin_info) {
 	if(typeof window.plugin !== 'function') window.plugin = function() {};
 	plugin_info.buildName = 'hurqalia22';
-	plugin_info.dateTimeVersion = '20161001.006';
+	plugin_info.dateTimeVersion = '20161001.007';
 	plugin_info.pluginId = 'ontheroad';
 
 	// PLUGIN START ////////////////////////////////////////////////////////
@@ -241,7 +241,7 @@ function wrapper(plugin_info) {
 	};
 
 	window.plugin.ontheroad.addArrivalMark = function () {
-	       var marker = L.marker(window.plugin.ontheroad.route_request.destination, {
+	       var marker = L.marker({ lat : window.plugin.ontheroad.route_request.destination.lat(), lng : window.plugin.ontheroad.route_request.destination.lng() },  {
 				title: window.plugin.ontheroad.config_request.uid,
 				icon: L.icon({
 					iconUrl: window.plugin.ontheroad.FLAG_ARRIVAL,
